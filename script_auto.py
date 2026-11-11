@@ -1,17 +1,14 @@
 from datetime import datetime, timedelta
-import email
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 import glob
 import os
-import smtplib
 import pandas as pd
+import resend
 
-# Servidor SMTP de Google Workspace (port 587 TLS)
-SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 587
-SENDER_EMAIL = os.environ.get("EMAIL_USER")
-SENDER_PASSWORD = os.environ.get("EMAIL_PASS")
+# Clau API de Resend des dels Secrets de GitHub
+resend.api_key = os.environ.get("RESEND_API_KEY")
+
+# Correu des de qui s'envia (Resend permet 'onboarding@resend.dev' per a proves)
+SENDER_EMAIL = "onboarding@resend.dev"
 
 LOG_FILE = "enviats_log.csv"
 DIES_RECORDATORI = 7
@@ -60,37 +57,29 @@ def parse_data(data_str):
   return None
 
 
-def enviar_correus_smtp(llista_correus):
+def enviar_correus_resend(llista_correus):
   if not llista_correus:
     print("ℹ️ No hi ha correus pendents per enviar avui.")
     return
 
-  if not SENDER_EMAIL or not SENDER_PASSWORD:
-    print("❌ Error: Credencials EMAIL_USER o EMAIL_PASS absents.")
+  if not resend.api_key:
+    print("❌ Error: Secret RESEND_API_KEY no trobat a GitHub Secrets.")
     return
 
-  # Netejar espais de la contrasenya
-  pwd = SENDER_PASSWORD.replace(" ", "").strip()
-  user = SENDER_EMAIL.strip()
-
   enviats_exit = []
-  try:
-    # Connexió amb STARTTLS al port 587
-    server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30)
-    server.ehlo()
-    server.starttls()
-    server.ehlo()
-    server.login(user, pwd)
 
-    for item in llista_correus:
-      msg = MIMEMultipart()
-      msg["From"] = user
-      msg["To"] = item["Destinatari"]
-      msg["Subject"] = item["Assumpte"]
-      msg.attach(MIMEText(item["Cos"], "plain"))
-
-      server.send_message(msg)
-      print(f"✅ Enviat correu a {item['Destinatari']} - {item['Assumpte']}")
+  for item in llista_correus:
+    try:
+      r = resend.Emails.send({
+          "from": SENDER_EMAIL,
+          "to": [item["Destinatari"]],
+          "subject": item["Assumpte"],
+          "text": item["Cos"],
+      })
+      print(
+          f"✅ Enviat correu correctament a {item['Destinatari']} -"
+          f" {item['Assumpte']}"
+      )
 
       enviats_exit.append({
           "ID_UNICI": item["ID_UNICI"],
@@ -99,30 +88,26 @@ def enviar_correus_smtp(llista_correus):
           "DESTINATARI": item["Destinatari"],
           "DATA_ENVIAMENT": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
       })
+    except Exception as e:
+      print(f"❌ Error enviant a {item['Destinatari']}: {e}")
 
-    server.quit()
-
+  if enviats_exit:
     global df_log
     df_nous = pd.DataFrame(enviats_exit)
     df_log = pd.concat([df_log, df_nous], ignore_index=True)
     df_log.to_csv(LOG_FILE, index=False)
     print(f"🎉 Procés finalitzat: {len(enviats_exit)} correus enviats.")
 
-  except Exception as e:
-    print(f"❌ Error durant l'enviament: {e}")
-
 
 # Cercar els CSVs
 fitxers_csv = [f for f in glob.glob("*.csv") if f != LOG_FILE]
-df_f, df_m = None, None
+df_f = None
 
 for f in fitxers_csv:
   temp_df = carregar_csv(f)
   if temp_df is not None:
     if "DATA_INICI" in temp_df.columns or "DATA_FINAL" in temp_df.columns:
       df_f = temp_df
-    elif "IND_ASSIGNACIO" in temp_df.columns or "NOM_MAIL" in temp_df.columns:
-      df_m = temp_df
 
 if df_f is not None:
   df_f["DATA_INICI_DT"] = df_f["DATA_INICI"].apply(parse_data)
@@ -159,6 +144,6 @@ if df_f is not None:
       f"🔍 Trobats {len(correus_per_enviar)} correus per enviar per a la data"
       f" d'avui ({DATA_AVUI})."
   )
-  enviar_correus_smtp(correus_per_enviar)
+  enviar_correus_resend(correus_per_enviar)
 else:
-  print("⚠️ No s'ha trobat el fitxer Formadors.csv amb la columna DATA_INICI.")
+  print("⚠️ No s'ha trobat el fitxer Formadors.csv amb les dades.")
