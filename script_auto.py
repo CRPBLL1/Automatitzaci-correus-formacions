@@ -1,13 +1,15 @@
+from datetime import datetime, timedelta
+import email
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 import glob
 import os
 import smtplib
-from datetime import datetime, timedelta
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 import pandas as pd
 
+# Servidor SMTP SSL de Google Workspace (port 465)
 SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 587
+SMTP_PORT = 465
 SENDER_EMAIL = os.environ.get("EMAIL_USER")
 SENDER_PASSWORD = os.environ.get("EMAIL_PASS")
 
@@ -50,7 +52,6 @@ def parse_data(data_str):
   if pd.isna(data_str):
     return None
   data_str = str(data_str).strip()
-  # Formats comuns de data: 11/11/26, 11/11/2026, 2026-11-11
   for fmt in ["%d/%m/%y", "%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"]:
     try:
       return datetime.strptime(data_str, fmt).date()
@@ -70,8 +71,8 @@ def enviar_correus_smtp(llista_correus):
 
   enviats_exit = []
   try:
-    server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
-    server.starttls()
+    # Connexió directa per SSL (port 465)
+    server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT)
     server.login(SENDER_EMAIL, SENDER_PASSWORD)
 
     for item in llista_correus:
@@ -122,10 +123,8 @@ if df_f is not None:
 
   correus_per_enviar = []
 
-  # Avaluació Formadors (mateix dia de DATA_FINAL)
   for idx, fila in df_f.iterrows():
     if pd.notna(fila["DATA_FINAL_DT"]) and fila["DATA_FINAL_DT"] == DATA_AVUI:
-      # Cerca l'adreça de correu
       email_dest = ""
       if "USUARI_XTEC" in fila and pd.notna(fila["USUARI_XTEC"]):
         u = str(fila["USUARI_XTEC"]).strip()
