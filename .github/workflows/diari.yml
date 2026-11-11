@@ -26,8 +26,9 @@ jobs:
 
     - name: Executar script d'enviament de correus
       env:
-        RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-      run: python script_auto.py
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+        run: python script_auto.py
 
     - name: Desar l'històric d'enviats actualitzat a GitHub
       run: |
