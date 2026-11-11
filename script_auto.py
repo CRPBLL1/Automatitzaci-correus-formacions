@@ -7,9 +7,9 @@ import os
 import smtplib
 import pandas as pd
 
-# Servidor SMTP SSL de Google Workspace (port 465)
+# Servidor SMTP de Google Workspace (port 587 TLS)
 SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 465
+SMTP_PORT = 587
 SENDER_EMAIL = os.environ.get("EMAIL_USER")
 SENDER_PASSWORD = os.environ.get("EMAIL_PASS")
 
@@ -69,15 +69,22 @@ def enviar_correus_smtp(llista_correus):
     print("❌ Error: Credencials EMAIL_USER o EMAIL_PASS absents.")
     return
 
+  # Netejar espais de la contrasenya
+  pwd = SENDER_PASSWORD.replace(" ", "").strip()
+  user = SENDER_EMAIL.strip()
+
   enviats_exit = []
   try:
-    # Connexió directa per SSL (port 465)
-    server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT)
-    server.login(SENDER_EMAIL, SENDER_PASSWORD)
+    # Connexió amb STARTTLS al port 587
+    server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30)
+    server.ehlo()
+    server.starttls()
+    server.ehlo()
+    server.login(user, pwd)
 
     for item in llista_correus:
       msg = MIMEMultipart()
-      msg["From"] = SENDER_EMAIL
+      msg["From"] = user
       msg["To"] = item["Destinatari"]
       msg["Subject"] = item["Assumpte"]
       msg.attach(MIMEText(item["Cos"], "plain"))
