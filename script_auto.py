@@ -1,12 +1,13 @@
 from datetime import datetime, timedelta
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 import glob
-import json
 import os
-import urllib.request
+import smtplib
 import pandas as pd
 
-RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
-SENDER_EMAIL = "onboarding@resend.dev"
+SENDER_EMAIL = os.environ.get("EMAIL_USER")
+SENDER_PASSWORD = os.environ.get("EMAIL_PASS")
 
 LOG_FILE = "enviats_log.csv"
 DIES_RECORDATORI = 7
@@ -54,58 +55,55 @@ def parse_data(data_str):
   return None
 
 
-def enviar_correus_resend(llista_correus):
+def enviar_correus_smtp(llista_correus):
   if not llista_correus:
     print("ℹ️ No hi ha correus pendents per enviar avui.")
     return
 
-  if not RESEND_API_KEY:
-    print("❌ Error: Secret RESEND_API_KEY no trobat a GitHub Secrets.")
+  if not SENDER_EMAIL or not SENDER_PASSWORD:
+    print("❌ Error: Credencials EMAIL_USER o EMAIL_PASS absents.")
     return
 
   enviats_exit = []
-  url = "https://api.resend.com/emails"
 
-  for item in llista_correus:
-    data = json.dumps({
-        "from": SENDER_EMAIL,
-        "to": [item["Destinatari"]],
-        "subject": item["Assumpte"],
-        "text": item["Cos"],
-    }).encode("utf-8")
-
-    req = urllib.request.Request(
-        url,
-        data=data,
-        headers={
-            "Authorization": f"Bearer {RESEND_API_KEY.strip()}",
-            "Content-Type": "application/json",
-        },
+  # Intentar connexió mitjançant el servidor smtp.gmail.com amb TLS
+  try:
+    server = smtplib.SMTP("smtp.gmail.com", 587)
+    server.ehlo()
+    server.starttls()
+    server.ehlo()
+    server.login(
+        SENDER_EMAIL.strip(), SENDER_PASSWORD.replace(" ", "").strip()
     )
 
-    try:
-      with urllib.request.urlopen(req) as response:
-        if response.status in [200, 201]:
-          print(
-              f"✅ Enviat correu correctament a {item['Destinatari']} -"
-              f" {item['Assumpte']}"
-          )
-          enviats_exit.append({
-              "ID_UNICI": item["ID_UNICI"],
-              "TIPUS_CORREU": item["ID_UNICI"].split("_")[0],
-              "CODI_ACTIVITAT": str(item["Activitat"]).split()[0],
-              "DESTINATARI": item["Destinatari"],
-              "DATA_ENVIAMENT": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-          })
-    except Exception as e:
-      print(f"❌ Error enviant a {item['Destinatari']}: {e}")
+    for item in llista_correus:
+      msg = MIMEMultipart()
+      msg["From"] = SENDER_EMAIL.strip()
+      msg["To"] = item["Destinatari"]
+      msg["Subject"] = item["Assumpte"]
+      msg.attach(MIMEText(item["Cos"], "plain"))
 
-  if enviats_exit:
+      server.send_message(msg)
+      print(f"✅ Enviat correu real a {item['Destinatari']} - {item['Assumpte']}")
+
+      enviats_exit.append({
+          "ID_UNICI": item["ID_UNICI"],
+          "TIPUS_CORREU": item["ID_UNICI"].split("_")[0],
+          "CODI_ACTIVITAT": str(item["Activitat"]).split()[0],
+          "DESTINATARI": item["Destinatari"],
+          "DATA_ENVIAMENT": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+      })
+
+    server.quit()
+
     global df_log
     df_nous = pd.DataFrame(enviats_exit)
     df_log = pd.concat([df_log, df_nous], ignore_index=True)
     df_log.to_csv(LOG_FILE, index=False)
     print(f"🎉 Procés finalitzat: {len(enviats_exit)} correus enviats.")
+
+  except Exception as e:
+    print(f"❌ Error durant l'enviament SMTP: {e}")
 
 
 fitxers_csv = [f for f in glob.glob("*.csv") if f != LOG_FILE]
@@ -152,6 +150,6 @@ if df_f is not None:
       f"🔍 Trobats {len(correus_per_enviar)} correus per enviar per a la data"
       f" d'avui ({DATA_AVUI})."
   )
-  enviar_correus_resend(correus_per_enviar)
+  enviar_correus_smtp(correus_per_enviar)
 else:
   print("⚠️ No s'ha trobat el fitxer Formadors.csv amb les dades.")
