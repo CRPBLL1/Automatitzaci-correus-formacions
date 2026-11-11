@@ -6,7 +6,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import pandas as pd
 
-SMTP_SERVER = "smtp.xtec.cat"
+SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 SENDER_EMAIL = os.environ.get("EMAIL_USER")
 SENDER_PASSWORD = os.environ.get("EMAIL_PASS")
