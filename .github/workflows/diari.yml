@@ -29,7 +29,6 @@ jobs:
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
         run: python script_auto.py
-
     - name: Desar l'històric d'enviats actualitzat a GitHub
       run: |
         git config --global user.name "GitHub Action Bot"
