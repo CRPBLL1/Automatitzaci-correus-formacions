@@ -1,20 +1,17 @@
 from datetime import datetime, timedelta
 import glob
+import json
 import os
+import urllib.request
 import pandas as pd
-import resend
 
-# Clau API de Resend des dels Secrets de GitHub
-resend.api_key = os.environ.get("RESEND_API_KEY")
-
-# Correu des de qui s'envia (Resend permet 'onboarding@resend.dev' per a proves)
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
 SENDER_EMAIL = "onboarding@resend.dev"
 
 LOG_FILE = "enviats_log.csv"
 DIES_RECORDATORI = 7
 DATA_AVUI = datetime.today().date()
 
-# Carregar o crear el log
 if os.path.exists(LOG_FILE):
   df_log = pd.read_csv(LOG_FILE)
 else:
@@ -62,32 +59,44 @@ def enviar_correus_resend(llista_correus):
     print("ℹ️ No hi ha correus pendents per enviar avui.")
     return
 
-  if not resend.api_key:
+  if not RESEND_API_KEY:
     print("❌ Error: Secret RESEND_API_KEY no trobat a GitHub Secrets.")
     return
 
   enviats_exit = []
+  url = "https://api.resend.com/emails"
 
   for item in llista_correus:
-    try:
-      r = resend.Emails.send({
-          "from": SENDER_EMAIL,
-          "to": [item["Destinatari"]],
-          "subject": item["Assumpte"],
-          "text": item["Cos"],
-      })
-      print(
-          f"✅ Enviat correu correctament a {item['Destinatari']} -"
-          f" {item['Assumpte']}"
-      )
+    data = json.dumps({
+        "from": SENDER_EMAIL,
+        "to": [item["Destinatari"]],
+        "subject": item["Assumpte"],
+        "text": item["Cos"],
+    }).encode("utf-8")
 
-      enviats_exit.append({
-          "ID_UNICI": item["ID_UNICI"],
-          "TIPUS_CORREU": item["ID_UNICI"].split("_")[0],
-          "CODI_ACTIVITAT": str(item["Activitat"]).split()[0],
-          "DESTINATARI": item["Destinatari"],
-          "DATA_ENVIAMENT": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-      })
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={
+            "Authorization": f"Bearer {RESEND_API_KEY.strip()}",
+            "Content-Type": "application/json",
+        },
+    )
+
+    try:
+      with urllib.request.urlopen(req) as response:
+        if response.status in [200, 201]:
+          print(
+              f"✅ Enviat correu correctament a {item['Destinatari']} -"
+              f" {item['Assumpte']}"
+          )
+          enviats_exit.append({
+              "ID_UNICI": item["ID_UNICI"],
+              "TIPUS_CORREU": item["ID_UNICI"].split("_")[0],
+              "CODI_ACTIVITAT": str(item["Activitat"]).split()[0],
+              "DESTINATARI": item["Destinatari"],
+              "DATA_ENVIAMENT": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+          })
     except Exception as e:
       print(f"❌ Error enviant a {item['Destinatari']}: {e}")
 
@@ -99,7 +108,6 @@ def enviar_correus_resend(llista_correus):
     print(f"🎉 Procés finalitzat: {len(enviats_exit)} correus enviats.")
 
 
-# Cercar els CSVs
 fitxers_csv = [f for f in glob.glob("*.csv") if f != LOG_FILE]
 df_f = None
 
